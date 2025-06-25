@@ -6,7 +6,7 @@ import shutil
 st.title("Chrome Remote Desktop Setup")
 
 # User Inputs
-CRD_SSH_Code = st.text_input("Google CRD SSH Code", "")
+CRD_SSH_Code = st.text_input("Google CRD SSH Code", "", type="password")
 username = st.text_input("Username", "user")
 password = st.text_input("Password", "root", type="password")
 Pin = st.number_input("PIN (6+ digits)", min_value=100000, max_value=999999, value=123456)
